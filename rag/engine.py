@@ -316,7 +316,7 @@ class CheckInAnswerEngine:
             return
         if question_type == QuestionType.FRUSTRATION:
             answer.outcome = AnswerOutcome.FRUSTRATION
-            yield self.build_frustration_reply(question, tracker, chat_history, conversation_history)
+            yield self.build_frustration_reply(question, role, tracker, chat_history, conversation_history)
             return
         if question_type == QuestionType.CONTACT_REQUEST:
             answer.outcome = AnswerOutcome.CONTACT_REPLY
@@ -477,6 +477,7 @@ class CheckInAnswerEngine:
     def build_frustration_reply(
         self,
         message: str,
+        role: UserRole,
         tracker: ConversationTracker,
         chat_history: list[ChatTurn],
         conversation_history: str,
@@ -498,7 +499,7 @@ class CheckInAnswerEngine:
             reply = reply.format(previous_question=last_system_question[:MAX_QUOTED_QUESTION_LENGTH])
         else:
             reply = pick_varied_message(FRUSTRATION_MESSAGES, message_index)
-        action = decide_action_for_frustration(tracker)
+        action = decide_action_for_frustration(role, tracker, datetime.now())
         apply_escalation_action_to_tracker(action, tracker)
         escalation_text = build_escalation_text(action, is_business_inquiry=False)
         return "\n\n".join(text for text in (reply, escalation_text) if text)

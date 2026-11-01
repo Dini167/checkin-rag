@@ -125,13 +125,16 @@ def test_business_inquiry_gets_email_once() -> None:
     assert decide_action_for_business_inquiry(tracker) == EscalationAction.EMAIL_ALREADY_SHOWN
 
 
-def test_frustration_without_failures_gets_no_email() -> None:
-    assert decide_action_for_frustration(create_tracker()) == EscalationAction.NONE
-
-
-def test_frustration_after_failure_gets_email_once() -> None:
+def test_frustration_after_one_failure_gets_no_email() -> None:
     tracker = create_tracker()
-    tracker.record_service_failure()
-    assert decide_action_for_frustration(tracker) == EscalationAction.SHOW_EMAIL
+    tracker.record_unanswered_question(DIFFERENT_QUESTIONS[0])
+    assert decide_action_for_frustration(UserRole.EMPLOYEE, tracker, FIVE_MINUTES_LATER) == EscalationAction.NONE
+
+
+def test_frustration_after_three_failures_gets_email_once() -> None:
+    tracker = create_tracker()
+    for question in DIFFERENT_QUESTIONS:
+        tracker.record_unanswered_question(question)
+    assert decide_action_for_frustration(UserRole.EMPLOYEE, tracker, FIVE_MINUTES_LATER) == EscalationAction.SHOW_EMAIL
     tracker.mark_email_shown()
-    assert decide_action_for_frustration(tracker) == EscalationAction.NONE
+    assert decide_action_for_frustration(UserRole.EMPLOYEE, tracker, FIVE_MINUTES_LATER) == EscalationAction.NONE

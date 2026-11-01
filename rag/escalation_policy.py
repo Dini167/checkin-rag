@@ -84,8 +84,13 @@ def decide_action_for_business_inquiry(tracker: ConversationTracker) -> Escalati
     return EscalationAction.SHOW_EMAIL
 
 
-def decide_action_for_frustration(tracker: ConversationTracker) -> EscalationAction:
-    """תסכול אחרי תשובה שנכשלה הוא בדיוק המקרה הקיצוני שבו מציגים את המייל."""
-    if tracker.has_failed_answers and not tracker.email_already_shown:
+def decide_action_for_frustration(
+    role: UserRole, tracker: ConversationTracker, now: datetime
+) -> EscalationAction:
+    """תסכול לא עוקף את הכללים המחמירים: המייל מוצג רק אחרי 3 כישלונות, או 30 דקות
+    ו־2 כישלונות אחרונים (post_build_fixes, תיקון 31)."""
+    if role == UserRole.GUEST or tracker.email_already_shown:
+        return EscalationAction.NONE
+    if is_email_allowed_for_registered_user(tracker, now):
         return EscalationAction.SHOW_EMAIL
     return EscalationAction.NONE
