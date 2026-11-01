@@ -1,0 +1,7 @@
+.env
+.venv/
+storage/
+eval/results/
+__pycache__/
+.pytest_cache/
+CheckIn-RAG-מאגר-ידע/
