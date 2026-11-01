@@ -56,6 +56,8 @@ BACKUP_ANSWER_MODEL_NAMES = read_text_setting(
 ).split(",")
 # כשכל המודלים בחריגה ממכסה: ממתינים ומנסים סבב נוסף (מגבלות רבות הן לדקה)
 QUOTA_RETRY_WAIT_SECONDS = 5
+# מודל שופט בהערכה: שונה ממודל התשובה (Groq חסום ב־NetFree)
+JUDGE_MODEL_NAME = read_text_setting("JUDGE_MODEL_NAME", "gemini-3.1-flash-lite")
 # מודל קל ומהיר לניסוח מחדש ולסיווג השאלה, כדי לא להאט את התשובה.
 QUESTION_ANALYSIS_MODEL_NAME = read_text_setting(
     "QUESTION_ANALYSIS_MODEL_NAME", "gemini-3.5-flash-lite"
@@ -88,7 +90,8 @@ TOP_K = read_int_setting("TOP_K", 5)
 # כמה מועמדים כל שיטת חיפוש מחזירה לפני האיחוד
 CANDIDATES_PER_RETRIEVER = read_int_setting("CANDIDATES_PER_RETRIEVER", 10)
 # סף דמיון קוסינוס בחיפוש הווקטורי. מתחתיו קטע לא נחשב רלוונטי.
-RELEVANCE_THRESHOLD = read_float_setting("RELEVANCE_THRESHOLD", 0.6)
+# כויל לפי ההערכה: שאלות עם תשובה ≥ 0.785, שאלות בלי תשובה ≤ 0.695 (docs/issues_log.md)
+RELEVANCE_THRESHOLD = read_float_setting("RELEVANCE_THRESHOLD", 0.72)
 # הורדת קידומות עבריות ב־BM25 (ראו README סעיף 13). כבוי כברירת מחדל עד המדידה.
 BM25_STRIP_HEBREW_PREFIXES = read_bool_setting("BM25_STRIP_HEBREW_PREFIXES", False)
 # ניסוח מחדש של השאלה (README סעיפים 10, 16)

@@ -23,7 +23,7 @@ import config
 from ingestion.audience_tagging import SENSITIVE_KEYWORDS
 from rag.conversation_tracker import ConversationTracker
 from rag.engine import AnswerOutcome, ChatTurn, CheckInAnswerEngine, create_answer_engine
-from rag.model_providers import create_fallback_llm
+from rag.model_providers import create_judge_llm
 from rag.prompts import UserRole
 
 logger = logging.getLogger(__name__)
@@ -97,13 +97,36 @@ def measure_retrieval_recall(engine: CheckInAnswerEngine, questions: list[dict])
     """
     questions_with_sources = [question for question in questions if question["expected_sources"]]
     misses = []
-    for question in questions_with_sources:
+    reciprocal_ranks = []
+    # הדמיון הגבוה ביותר לכל שאלה, כדי לכייל את סף הרלוונטיות (שאלות עם תשובה מול בלי)
+    highest_cosine_by_question = {}
+    for question in questions:
         retrieval = engine.retriever.retrieve([question["question"]])
+        highest_cosine_by_question[question["id"]] = round(
+            max((item.best_cosine_similarity or 0.0) for item in retrieval.chunks), 3
+        )
+        if not question["expected_sources"]:
+            continue
         retrieved_ids = [item.chunk.chunk_id for item in retrieval.chunks]
-        if not retrieved_documents_match(retrieved_ids, engine, question["expected_sources"]):
+        first_match_rank = next(
+            (
+                rank
+                for rank, chunk_id in enumerate(retrieved_ids, start=1)
+                if retrieved_documents_match([chunk_id], engine, question["expected_sources"])
+            ),
+            None,
+        )
+        reciprocal_ranks.append(1 / first_match_rank if first_match_rank else 0.0)
+        if first_match_rank is None:
             misses.append(question["id"])
     hits = len(questions_with_sources) - len(misses)
-    return {"recall_at_k": hits / len(questions_with_sources), "misses": misses}
+    return {
+        "recall_at_k": hits / len(questions_with_sources),
+        # MRR: ממוצע של 1/המיקום של המקור הנכון הראשון. 1.0 = תמיד במקום הראשון
+        "mean_reciprocal_rank": round(sum(reciprocal_ranks) / len(reciprocal_ranks), 3),
+        "misses": misses,
+        "highest_cosine_by_question": highest_cosine_by_question,
+    }
 
 
 def contains_support_email(text: str) -> bool:
@@ -125,7 +148,7 @@ def check_behavior_automatically(question: dict, outcome: AnswerOutcome, answer_
 
 
 def judge_answer(judge_llm, question: dict, answer_text: str, chunk_texts: list[str]) -> dict:
-    """שופט ממודל אחר (Groq) מעריך נאמנות, נכונות וטיפול בתפקיד."""
+    """מודל שופט, שונה ממודל התשובה, מעריך נאמנות, נכונות וטיפול בתפקיד."""
     prompt = JUDGE_PROMPT.format(
         role=question["role"],
         question=question["question"],
@@ -191,7 +214,12 @@ def load_cached_results(results_path: Path) -> dict[str, dict]:
     if not results_path.exists():
         return {}
     saved = json.loads(results_path.read_text(encoding="utf-8"))
-    return {result["id"]: result for result in saved.get("questions", [])}
+    # תשובה שנכשלה בגלל עומס או מכסה לא נשמרת במטמון, כדי שתורץ שוב
+    return {
+        result["id"]: result
+        for result in saved.get("questions", [])
+        if result["outcome"] != AnswerOutcome.SERVICE_UNAVAILABLE.value
+    }
 
 
 def summarize_answer_results(question_results: list[dict]) -> dict:
@@ -220,7 +248,7 @@ def parse_command_line_arguments() -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, default=config.TOP_K)
     parser.add_argument("--strip-prefixes", action="store_true", help="הורדת קידומות ב־BM25")
     parser.add_argument("--retrieval-only", action="store_true", help="רק Recall@k")
-    parser.add_argument("--no-judge", action="store_true", help="בלי שופט Groq")
+    parser.add_argument("--no-judge", action="store_true", help="בלי מודל שופט")
     parser.add_argument("--pause-seconds", type=float, default=4.0, help="המתנה בין שאלות (מכסה)")
     parser.add_argument("--name", default="default", help="שם התצורה לקובץ התוצאות")
     return parser.parse_args()
@@ -237,10 +265,14 @@ def main() -> None:
         "configuration": {"top_k": arguments.top_k, "strip_prefixes": arguments.strip_prefixes},
         "retrieval": measure_retrieval_recall(engine, evaluation_set["questions"]),
     }
-    print(f"Recall@{arguments.top_k}: {report['retrieval']['recall_at_k']:.0%}  (פספוסים: {report['retrieval']['misses']})")
+    retrieval_report = report["retrieval"]
+    print(
+        f"Recall@{arguments.top_k}: {retrieval_report['recall_at_k']:.0%}, "
+        f"MRR: {retrieval_report['mean_reciprocal_rank']}  (פספוסים: {retrieval_report['misses']})"
+    )
 
     if not arguments.retrieval_only:
-        judge_llm = None if arguments.no_judge else create_fallback_llm()
+        judge_llm = None if arguments.no_judge else create_judge_llm()
         cached_results = load_cached_results(results_path)
         question_results = []
         for question in evaluation_set["questions"]:

@@ -156,3 +156,11 @@ def create_groq_llm() -> LLM:
         temperature=0.1,
         max_retries=0,
     )
+
+
+def create_judge_llm() -> LLM:
+    """מודל שופט להערכה: מודל שונה ממודל התשובה, כדי שלא יבדוק את עצמו.
+
+    Groq חסום ברשת NetFree, ולכן השופט הוא מודל Gemini אחר עם מכסה נפרדת.
+    """
+    return create_gemini_llm(config.JUDGE_MODEL_NAME, temperature=0.0)

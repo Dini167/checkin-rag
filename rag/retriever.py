@@ -121,7 +121,9 @@ class HybridRetriever:
         ranked_lists: list[RankedList] = []
         best_cosine_by_chunk_id: dict[str, float] = {}
 
-        for ranked_list, cosine_by_chunk_id in self.run_vector_searches_in_parallel(queries):
+        # חיפוש וקטורי רק על הניסוח הראשון (השאלה העצמאית): כל ניסוח עולה embedding ממכסה
+        # יומית מוגבלת. הניסוחים החלופיים עוברים ל־BM25 בחינם (post_build_fixes, תיקון 33)
+        for ranked_list, cosine_by_chunk_id in self.run_vector_searches_in_parallel(queries[:1]):
             ranked_lists.append(ranked_list)
             for chunk_id, cosine in cosine_by_chunk_id.items():
                 best_cosine_by_chunk_id[chunk_id] = max(
